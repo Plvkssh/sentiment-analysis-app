@@ -1,0 +1,48 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: sentiment-alerts
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: sentiment.rules
+      rules:
+        - alert: SentimentApiDown
+          expr: up{job=~".*sentiment.*"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: Sentiment API down
+            description: Target is not reachable for 1 minute
+
+        - alert: SentimentHighLatencyP95
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(http_server_requests_seconds_bucket{uri="/api/sentiment"}[5m])
+              )
+            ) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: High latency p95
+            description: p95 latency above 0.5 seconds for 5 minutes
+
+        - alert: SentimentHigh5xxRate
+          expr: |
+            (
+              sum(rate(http_server_requests_seconds_count{uri="/api/sentiment",status=~"5.."}[5m]))
+              /
+              sum(rate(http_server_requests_seconds_count{uri="/api/sentiment"}[5m]))
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: High 5xx rate
+            description: 5xx ratio above 0.05 for 5 minutes
